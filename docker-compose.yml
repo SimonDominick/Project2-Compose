@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  #Docker-in-Docker service, used to enable Jenkins containers to safely execute Docker commands (build images)
+  dind:
+    image: docker:dind
+    privileged: true  # Enable privileged mode to allow the Docker daemon to start within the container
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    volumes:
+      - docker-certs-client:/certs/client
+      - docker-cache:/var/lib/docker  # Cache the Docker image layer to improve build speed
+      - jenkins-data:/var/jenkins_home # Persist the Jenkins home directory
+    networks: { jenkins: { aliases: [docker] } }
+    command: >-
+      --host=tcp://0.0.0.0:2376 --host=unix:///var/run/docker.sock
+
+  # jenkins service
+  jenkins:
+    image: jenkins/jenkins:lts-jdk11
+    restart: unless-stopped
+    depends_on: { dind: { condition: service_started } }
+    environment:
+      - DOCKER_HOST=tcp://docker:2376 # Specify the Docker Daemon address
+      - DOCKER_CERT_PATH=/certs/client
+      - DOCKER_TLS_VERIFY=1
+      - TZ=Australia/Perth
+    volumes:
+      - jenkins-data:/var/jenkins_home  # Jenkins home directory persistence, including job configuration and plugins, etc
+      - docker-certs-client:/certs/client:ro
+      - /usr/bin/docker:/usr/bin/docker  # Map the host machine's docker commands in
+    ports: ["80:8080","5000:50000"]
+    networks: [jenkins]
+
+# Define Named Volumes (for Data Persistence) 
+volumes:
+  docker-certs-client:
+  docker-cache:
+  jenkins-data:
+
+# define network
+networks: { jenkins: { driver: bridge } }
+
+
+
+
+
